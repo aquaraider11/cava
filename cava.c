@@ -286,7 +286,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 
 	// general: console title
 	printf("%c]0;%s%c", '\033', PACKAGE, '\007');
-	
+
 	configPath[0] = '\0';
 
 	setlocale(LC_ALL, "");
@@ -500,7 +500,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 				if( access( p.raw_target, F_OK ) != -1 ) {
 					//testopening in case it's a fifo
 					fptest = open(p.raw_target, O_RDONLY | O_NONBLOCK, 0644);
-	
+
 					if (fptest == -1) {
 						printf("could not open file %s for writing\n",
 							p.raw_target);
@@ -606,7 +606,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 			lcf[n] = fre[n] * (M /2);
 			if (n != 0) {
 				hcf[n - 1] = lcf[n] - 1;
-	
+
 				//pushing the spectrum up if the expe function gets "clumped"
 				if (lcf[n] <= lcf[n - 1])lcf[n] = lcf[n - 1] + 1;
 				hcf[n - 1] = lcf[n] - 1;
@@ -755,7 +755,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 					fl = monstercat_filter(fl, bars / 2, p.waves,
 					 	p.monstercat);
 					fr = monstercat_filter(fr, bars / 2, p.waves,
-						p.monstercat);	
+						p.monstercat);
 				} else {
 					fl = monstercat_filter(fl, bars, p.waves, p.monstercat);
 				}
@@ -827,7 +827,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 			//autmatic sens adjustment
 			if (p.autosens) {
 				for (o = 0; o < bars; o++) {
-					if (f[o] > height ) {
+					if (f[o] > height * 2) {
 						senseLow = false;
 						p.sens = p.sens * 0.985;
 						break;
@@ -836,7 +836,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 				if (o == bars - 1) p.sens = p.sens * 1.002;
 				}
 			}
-			
+
 			// output: draw processed input
 			#ifndef DEBUG
 				switch (p.om) {
