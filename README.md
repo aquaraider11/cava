@@ -1,9 +1,11 @@
-C.A.V.A.
+C.A.V.A. [![Build Status](https://github.com/karlstav/cava/workflows/build/badge.svg)](https://github.com/karlstav/cava/actions)
 ====================
 
 **C**onsole-based **A**udio **V**isualizer for **A**LSA
 
-also supports audio input from Pulseaudio, fifo (mpd), sndio and squeezelite.
+also supports audio input from Pulseaudio, fifo (mpd), sndio, squeezelite and portaudio.
+
+Now also works on macOS!
 
 by [Karl Stavestrand](mailto:karl@stavestrand.no)
 
@@ -18,21 +20,26 @@ thanks to [anko](https://github.com/anko) for the gif, here is the [recipe]( htt
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
 - [What it is](#what-it-is)
-- [Build requirements](#build-requirements)
-- [Getting started](#getting-started)
-  - [Installing manually](#installing-manually)
-  - [Uninstalling](#uninstalling)
-  - [openSUSE](#opensuse)
-  - [Fedora](#fedora)
-  - [Arch](#arch)
-  - [Ubuntu](#ubuntu)
+- [Installing](#installing)
+  - [From Source](#from-source)
+    - [Installing Build Requirements](#installing-build-requirements)
+    - [Building](#building)
+    - [Installing](#installing-1)
+    - [Uninstalling](#uninstalling)
+  - [Some distro specific pre-made binaries/recipes](#some-distro-specific-pre-made-binariesrecipes)
+    - [openSUSE](#opensuse)
+    - [Fedora](#fedora)
+    - [Arch](#arch)
+    - [Ubuntu](#ubuntu)
 - [Capturing audio](#capturing-audio)
   - [From Pulseaudio monitor source (Easy, default if supported)](#from-pulseaudio-monitor-source-easy-default-if-supported)
   - [From ALSA-loopback device (Tricky)](#from-alsa-loopback-device-tricky)
   - [From mpd's fifo output](#from-mpds-fifo-output)
   - [sndio](#sndio)
   - [squeezelite](#squeezelite)
+  - [macOS](#macos)
 - [Running via ssh](#running-via-ssh)
+  - [Raw Output](#raw-output)
 - [Font notes](#font-notes)
   - [In ttys](#in-ttys)
   - [In terminal emulators](#in-terminal-emulators)
@@ -53,57 +60,96 @@ C.A.V.A. is a bar spectrum audio visualizer for the Linux terminal using ALSA, p
 This program is not intended for scientific use. It's written to look responsive and aesthetic when used to visualize music. 
 
 
-Build requirements
+Installing
 ------------------
-* [FFTW](http://www.fftw.org/)
-* [ncursesw dev files](http://www.gnu.org/software/ncurses/) (bundled in ncurses in arch)
-* [ALSA dev files](http://alsa-project.org/)
-* [Pulseaudio dev files](http://freedesktop.org/software/pulseaudio/doxygen/)
-* libtool
 
-Only FFTW is actually required for CAVA to compile, but for maximum usage and performance ncurses and pulseaudio and/or alsa dev files are recommended. Not sure how to get the pulseaudio dev files for other distros than debian/ubuntu or if they are bundled in pulseaudio.
+### From Source
+
+#### Installing Build Requirements
+
+Required components:
+* [FFTW](http://www.fftw.org/)
+* libtool
+* automake
+* build-essentials
+* [iniparser](https://github.com/ndevilla/iniparser)
+
+
+Recomended components:
+* [ncursesw dev files](http://www.gnu.org/software/ncurses/) (bundled in ncurses in arch)
+* [ALSA dev files](http://alsa-project.org/), or
+* [Pulseaudio dev files](http://freedesktop.org/software/pulseaudio/doxygen/), or
+* Portaudio, or
+* Sndio
+
+Only FFTW and the other build tools are actually required for CAVA to compile, but this will only give you the ability to read from fifo files. To more easly grab audio from your system pulseaudio, alsa, sndio or portaudio dev files are recommended (depending on what audio system you are using). Not sure how to get the pulseaudio dev files for other distros than debian/ubuntu or if they are bundled in pulseaudio. 
+
+
+For better a better visual experience ncurses is also recomended.
+
+Iniparser is also required, but if it is not already installed, a bundled version will be used.
 
 All the requirements can be installed easily in all major distros:
 
-Debian/Raspbian:
+Debian Buster or higher/Ubuntu 18.04 or higher :
 
-    apt-get install libfftw3-dev libasound2-dev libncursesw5-dev libpulse-dev libtool
+    apt-get install libfftw3-dev libasound2-dev libncursesw5-dev libpulse-dev libtool automake libiniparser-dev
+    export CPPFLAGS=-I/usr/include/iniparser
+
+
+older Debian/Ubuntu:
+
+    apt-get install libfftw3-dev libasound2-dev libncursesw5-dev libpulse-dev libtool automake
+
 
 ArchLinux:
 
     pacman -S base-devel fftw ncurses alsa-lib iniparser pulseaudio
 
+
 openSUSE:
 
     zypper install alsa-devel ncurses-devel fftw3-devel libpulse-devel libtool
+
 
 Fedora:
 
     dnf install alsa-lib-devel ncurses-devel fftw3-devel pulseaudio-libs-devel libtool
 
+    
+macOS:
 
-Iniparser is also required, but if it is not already installed, a bundled version will be used.
+First install homebrew if you have't already:
 
-To run the autogen script you will also need `automake`, `libtool` and `git`.
+    /usr/bin/ruby -e "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/master/install)"
+
+Then install prerequisites:
+
+    brew install fftw ncurses libtool automake portaudio
+    
+Then fix macOS not finding libtool and ncursesw:
+
+    export LIBTOOL=`which glibtool`
+    export LIBTOOLIZE=`which glibtoolize`
+    ln -s `which glibtoolize` /usr/local/bin/libtoolize
+    ln -s /usr/lib/libncurses.dylib /usr/local/lib/libncursesw.dylib
+
+Tested on macOS High Sierra.
 
 
-Getting started
----------------
 
+#### Building
+ First of all clone this repo and cd in to it, then run:
+ 
     ./autogen.sh
     ./configure
     make
 
-You can use the following for compilation options:
+If you have a recommended component installed, but do not wish to use it (perhaps if building a binary on one machine to be used on another), then the corresponding feature can be disabled during configuration (see configure --help for details).
 
-    --enable-debug          	enable debug messages and frequency table output
-    --enable-legacy_iniparser	enable legacy iniparser mode necessary to build cava with iniparser < 4.0
 
-For example, turning on debugging messages:
-
-    ./configure --enable-debug 
     
-### Installing manually
+#### Installing 
 
 Install `cava` to default `/usr/local`:
 
@@ -113,11 +159,13 @@ Or you can change `PREFIX`, for example:
 
    ./configure --prefix=PREFIX
 
-### Uninstalling
+#### Uninstalling
 
     make uninstall
 
-### openSUSE
+
+### Some distro specific pre-made binaries/recipes    
+#### openSUSE
 
 Tumbleweed users have cava in their repo. They can just use:
 
@@ -129,20 +177,20 @@ Leap users need to add the multimedia:apps repository first:
 
 If you use another version just replace *openSUSE_Leap_42.2* with *openSUSE_13.2*, adjust it to your version.
 
-### Fedora
+#### Fedora
 
 Cava is available in Fedora 26 and later.  You can install Cava by
 running:
 
     dnf install cava
 
-### Arch
+#### Arch
 
 Cava is in [AUR](https://aur.archlinux.org/packages/cava/).
 
     pacaur -S cava
 
-### Ubuntu
+#### Ubuntu
 
 Michael Nguyen has added CAVA to his PPA, it can be installed with:
 
@@ -150,7 +198,11 @@ Michael Nguyen has added CAVA to his PPA, it can be installed with:
     sudo apt-get update
     sudo apt-get install cava
     
+For Ubuntu 18 or newer, you can use Harshal Sheth's PPA:
 
+    sudo add-apt-repository ppa:hsheth2/ppa
+    sudo apt-get update
+    sudo apt-get install cava
 
 All distro specific instalation sources might be out of date.
 
@@ -185,11 +237,11 @@ To create a loopback interface simply run:
 
 Hopefully your `aplay -l` should now contain a loopback interface.
 
-To make it presistent across boot add the line `snd-aloop` to "/etc/modules". To keep it form beeing loaded as the first soundcard add the line `options snd-aloop index=1` to "/etc/modprobe.d/alsa-base.conf", this will load it at '1'. You can replace '1' with whatever makes most sense in your audio setup.
+To make it persistent across boot add the line `snd-aloop` to "/etc/modules". To keep it from being loaded as the first soundcard add the line `options snd-aloop index=1` to "/etc/modprobe.d/alsa-base.conf", this will load it at '1'. You can replace '1' with whatever makes most sense in your audio setup.
 
-Playing the audio through your Loopback interface makes it possible for cava to to capture it, but there will be no sound in your speakers. In order to play audio on the loopback interface and your actual interface you must make use of the ALSA multi channel.
+Playing the audio through your Loopback interface makes it possible for cava to capture it, but there will be no sound in your speakers. In order to play audio on the loopback interface and your actual interface you must make use of the ALSA multi channel.
 
-Look at the included example file `example_files/etc/asound.conf` on how to use the multi channel. I was able to make this work on my laptop (an Asus UX31 running Ubuntu), but I had no luck with the ALSA method on my Rasberry PI (Rasbian) with an USB DAC. The PulseAudio method however works perfectly on my PI. 
+Look at the included example file `example_files/etc/asound.conf` on how to use the multi channel. I was able to make this work on my laptop (an Asus UX31 running Ubuntu), but I had no luck with the ALSA method on my Raspberry Pi (Rasbian) with an USB DAC. The PulseAudio method however works perfectly on my Pi. 
 
 Read more about the ALSA method [here](http://stackoverflow.com/questions/12984089/capture-playback-on-play-only-sound-card-with-alsa).
 
@@ -238,14 +290,27 @@ $ AUDIODEVICE=snd/0.monitor cava
 ```
 
 ### squeezelite
-[squeezelite](https://en.wikipedia.org/wiki/Squeezelite) is one of several software clients available for the Logitech Media Server. Squeezelite can export it's audio data as shared memory, which is what this input module uses.
-Configure C.A.V.A. with the `--enable-shmem` option, then adapt your config:
+[squeezelite](https://en.wikipedia.org/wiki/Squeezelite) is one of several software clients available for the Logitech Media Server. Squeezelite can export its audio data as shared memory, which is what this input module uses.
+Just adapt your config:
 ```
 method = shmem
 source = /squeezelite-AA:BB:CC:DD:EE:FF
 ```
 where `AA:BB:CC:DD:EE:FF` is squeezelite's MAC address (check the LMS Web GUI (Settings>Information) if unsure).
 Note: squeezelite must be started with the `-v` flag to enable visualizer support.
+
+### macOS
+Install [Soundflower](https://github.com/mattingalls/Soundflower) to create a loopback interface. Use Audio MIDI Setup to configure a virtual interface that outputs audio to both your speakers and the loopbacl interface, following [this](https://github.com/RogueAmoeba/Soundflower-Original/issues/44#issuecomment-151586106) recipe.
+
+Then edit your config to use this interface with portaudio:
+
+```
+method = portaudio
+source = "Soundflower (2ch)"
+```
+
+Note: cava looks no good in the default macOS terminal. For a better look install [kitty](https://sw.kovidgoyal.net/kitty/index.html). Be where that you might run into #109, that can be fixed like [this](https://stackoverflow.com/questions/7165108/in-os-x-lion-lang-is-not-set-to-utf-8-how-to-fix-it).
+
 
 Running via ssh
 ---------------
@@ -258,7 +323,9 @@ exit with ctrl+z then run 'bg' to keep it running after you log out.
 
 (You must be root to redirect to console. Simple sudo is not enough: Run `sudo su` first.)
 
+### Raw Output
 
+You can also use Cava's output for other programs by using raw output mode, which will write bar data to `STDOUT` that can be piped into other processes. More information on this option is documented in [the example config file](/example_files/config).
 
 Font notes
 ----------
@@ -311,11 +378,13 @@ If cava quits unexpectedly or is force killed, echo must be turned on manually w
 
 ### Controls
 
+NOTE: only works in ncurses output mode.
+
 | Key | Description |
 | --- | ----------- |
 | <kbd>up</kbd> / <kbd>down</kbd>| increase/decrease sensitivity |
 | <kbd>left</kbd> / <kbd>right</kbd>| increase/decrease bar width |
-| <kbd>f</kbd> / <kbd>b</kbd>| change forground/background color |
+| <kbd>f</kbd> / <kbd>b</kbd>| change foreground/background color |
 | <kbd>r</kbd> | Reload configuration |
 | <kbd>c</kbd> | Reload colors only |
 | <kbd>q</kbd> or <kbd>CTRL-C</kbd>| Quit C.A.V.A. |
@@ -325,7 +394,9 @@ Configuration
 
 As of version 0.4.0 all options are done in the config file, no more command-line arguments!
 
-By default a configuration file is located in `$XDG_CONFIG_HOME/cava/config` or `$HOME/.config/cava/config`, but cava can also be made to use a different file with the `-p` option. Look in the default config file for details on the different options.
+By default a configuration file is located in `$XDG_CONFIG_HOME/cava/config` or `$HOME/.config/cava/config`, but cava can also be made to use a different file with the `-p` option.
+
+If for some reason the config file is not in the config dir, copy the [bundled configuration file](/example_files/config) to the config dir manually.
 
 Sending cava a SIGUSR1 signal, will force cava to reload its configuration file. Thus, it behaves as if the user pressed <kbd>r</kbd> in the terminal. One might send a SIGUSR1 signal using `pkill` or `killall`.
 For example:
@@ -368,6 +439,6 @@ Thanks to:
 * [anko](https://github.com/anko)
 * [livibetter](https://github.com/livibetter)
 
-for mayor contributions in the early development of this project.
+for major contributions in the early development of this project.
 
 Also thanks to [dpayne](https://github.com/dpayne/) for figuring out how to find the pulseaudio default sink name.
