@@ -971,7 +971,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
 
                     // autmatic sens adjustment
                     if (p.autosens) {
-                        if (bars[n] > height && senselow) {
+                        if (bars[n] > height * 2 && senselow) {
                             p.sens = p.sens * 0.98;
                             senselow = false;
                         }
