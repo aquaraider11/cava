@@ -1095,7 +1095,7 @@ as of 0.4.0 all options are specified in config file, see in '/home/username/.co
                         bars[n] = 1;
 
                     // autmatic sens adjustment
-                    if (p.autosens) {
+                    if (p.autosens && !silence) {
                         if (bars[n] > height * 2 && senselow) {
                             p.sens = p.sens * 0.98;
                             senselow = false;
