@@ -2,7 +2,6 @@
 #include "input/common.h"
 
 #include <portaudio.h>
-#define PORTBUFSIZE 512
 
 #define SAMPLE_SILENCE -32767
 #define PA_SAMPLE_TYPE paInt16
@@ -15,7 +14,7 @@ typedef struct {
 } paTestData;
 
 static struct audio_data *audio;
-// static int n = 0;
+int16_t silence_buffer[8092] = {SAMPLE_SILENCE};
 
 static int recordCallback(const void *inputBuffer, void *outputBuffer,
                           unsigned long framesPerBuffer, const PaStreamCallbackTimeInfo *timeInfo,
@@ -23,10 +22,8 @@ static int recordCallback(const void *inputBuffer, void *outputBuffer,
     paTestData *data = (paTestData *)userData;
     SAMPLE *rptr = (SAMPLE *)inputBuffer;
     long framesToCalc;
-    // long i;
     int finished;
     unsigned long framesLeft = data->maxFrameIndex - data->frameIndex;
-    int16_t silence_buffer[PORTBUFSIZE] = {SAMPLE_SILENCE};
     (void)outputBuffer; // Prevent unused variable warnings.
     (void)timeInfo;
     (void)statusFlags;
@@ -40,41 +37,24 @@ static int recordCallback(const void *inputBuffer, void *outputBuffer,
         finished = paContinue;
     }
 
-    if (inputBuffer == NULL) {
-        write_to_fftw_input_buffers(silence_buffer, framesToCalc, audio);
-        /*
-                        for(i=0; i<framesToCalc; i++) {
-                                if(audio->channels == 1) audio->audio_out_l[n] = SAMPLE_SILENCE;
-                                if(audio->channels == 2) {
-                                        audio->audio_out_l[n] = SAMPLE_SILENCE;
-                                        audio->audio_out_r[n] = SAMPLE_SILENCE;
-                                }
-                                if(n == PORTBUFSIZE-1) n = 0;
-                        }
-        */
-    } else {
-        write_to_fftw_input_buffers(rptr, framesToCalc, audio);
-        /*
-                        for(i=0; i<framesToCalc; i++) {
-                                if(audio->channels == 1) {
-                                        audio->audio_out_l[n] = (rptr[0] + rptr[1]) / 2;
-                                        rptr += 2;
-                                }
-                                if(audio->channels == 2) {
-                                        audio->audio_out_l[n] = *rptr++;
-                                        audio->audio_out_r[n] = *rptr++;
-                                }
-                                n++;
-                                if(n == PORTBUFSIZE-1) n = 0;
-                        }
-        */
-    }
+    pthread_mutex_lock(&lock);
+
+    if (inputBuffer == NULL)
+        write_to_fftw_input_buffers(framesToCalc, silence_buffer, audio);
+    else
+        write_to_fftw_input_buffers(framesToCalc, rptr, audio);
+
+    pthread_mutex_unlock(&lock);
 
     data->frameIndex += framesToCalc;
     if (finished == paComplete) {
         data->frameIndex = 0;
         finished = paContinue;
     }
+
+    if (audio->terminate == 1)
+        finished = paComplete;
+
     return finished;
 }
 
@@ -145,13 +125,13 @@ void *input_portaudio(void *audiodata) {
     inputParameters.device = deviceNum;
 
     // set parameters
-    data.maxFrameIndex = PORTBUFSIZE;
-    data.recordedSamples = (SAMPLE *)malloc(2 * PORTBUFSIZE * sizeof(SAMPLE));
+    data.maxFrameIndex = audio->FFTtreblebufferSize * 1024;
+    data.recordedSamples = (SAMPLE *)malloc(2 * data.maxFrameIndex * sizeof(SAMPLE));
     if (data.recordedSamples == NULL) {
         fprintf(stderr, "Error: failure in memory allocation!\n");
         exit(EXIT_FAILURE);
     } else
-        memset(data.recordedSamples, 0x00, 2 * PORTBUFSIZE);
+        memset(data.recordedSamples, 0x00, 2 * data.maxFrameIndex);
 
     inputParameters.channelCount = 2;
     inputParameters.sampleFormat = PA_SAMPLE_TYPE;
@@ -160,8 +140,8 @@ void *input_portaudio(void *audiodata) {
     inputParameters.hostApiSpecificStreamInfo = NULL;
 
     // set it to work
-    err = Pa_OpenStream(&stream, &inputParameters, NULL, audio->rate, PORTBUFSIZE, paClipOff,
-                        recordCallback, &data);
+    err = Pa_OpenStream(&stream, &inputParameters, NULL, audio->rate, audio->FFTtreblebufferSize,
+                        paClipOff, recordCallback, &data);
     if (err != paNoError) {
         fprintf(stderr, "Error: failure in opening stream (%x)\n", err);
         exit(EXIT_FAILURE);
@@ -179,7 +159,7 @@ void *input_portaudio(void *audiodata) {
 
         //  record
         while ((err = Pa_IsStreamActive(stream)) == 1) {
-            Pa_Sleep(5);
+            Pa_Sleep(1000);
             if (audio->terminate == 1)
                 break;
         }

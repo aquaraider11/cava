@@ -3,8 +3,6 @@
 
 #include <time.h>
 
-#define SAMPLES_PER_BUFFER 512
-
 int open_fifo(const char *path) {
     int fd = open(path, O_RDONLY);
     int flags = fcntl(fd, F_GETFL, 0);
@@ -15,6 +13,7 @@ int open_fifo(const char *path) {
 // input: FIFO
 void *input_fifo(void *data) {
     struct audio_data *audio = (struct audio_data *)data;
+    int SAMPLES_PER_BUFFER = audio->FFTtreblebufferSize * 2;
     int bytes_per_sample = audio->format / 8;
     __attribute__((aligned(sizeof(uint16_t)))) uint8_t buf[SAMPLES_PER_BUFFER * bytes_per_sample];
     uint16_t *samples =
@@ -67,7 +66,9 @@ void *input_fifo(void *data) {
 
         // We worked with unsigned ints up until now to save on sign extension, but the FFT wants
         // signed ints.
-        write_to_fftw_input_buffers((int16_t *)samples, SAMPLES_PER_BUFFER / 2, audio);
+        pthread_mutex_lock(&lock);
+        write_to_fftw_input_buffers(SAMPLES_PER_BUFFER / 2, (int16_t *)samples, audio);
+        pthread_mutex_unlock(&lock);
     }
 
     close(fd);

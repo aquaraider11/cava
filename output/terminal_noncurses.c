@@ -25,9 +25,9 @@ int setecho(int fd, int onoff) {
         return -1;
 
     if (onoff == 0)
-        t.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL);
+        t.c_lflag &= ~(ECHO | ECHOE | ECHOK | ECHONL | ICANON);
     else
-        t.c_lflag |= (ECHO | ECHOE | ECHOK | ECHONL);
+        t.c_lflag |= (ECHO | ECHOE | ECHOK | ECHONL | ICANON);
 
     if (tcsetattr(fd, TCSANOW, &t) == -1)
         return -1;
@@ -35,17 +35,31 @@ int setecho(int fd, int onoff) {
     return 0;
 }
 
+// general: cleanup
+void free_terminal_noncurses(void) {
+    free(frame_buffer);
+    free(ttyframe_buffer);
+    free(spacestring);
+    free(ttyspacestring);
+    for (int i = 0; i < 8; i++) {
+        free(barstring[i]);
+        free(ttybarstring[i]);
+    }
+}
+
 int init_terminal_noncurses(int tty, int col, int bgcol, int width, int lines, int bar_width) {
+
+    free_terminal_noncurses();
 
     if (tty) {
 
         ttybuf_length = sizeof(char) * width * lines * 10;
         ttyframe_buffer = (char *)malloc(ttybuf_length);
-        ttyspacestring = (char *)malloc(sizeof(char) * bar_width);
+        ttyspacestring = (char *)malloc(sizeof(char) * (bar_width + 1));
 
         // clearing barstrings
         for (int n = 0; n < 8; n++) {
-            ttybarstring[n] = (char *)malloc(sizeof(char) * bar_width);
+            ttybarstring[n] = (char *)malloc(sizeof(char) * (bar_width + 1));
             ttybarstring[n][0] = '\0';
         }
         ttyspacestring[0] = '\0';
@@ -53,25 +67,25 @@ int init_terminal_noncurses(int tty, int col, int bgcol, int width, int lines, i
 
         // creating barstrings for drawing
         for (int n = 0; n < bar_width; n++) {
-            strcat(ttybarstring[0], "8");
-            strcat(ttybarstring[1], "1");
-            strcat(ttybarstring[2], "2");
-            strcat(ttybarstring[3], "3");
-            strcat(ttybarstring[4], "4");
-            strcat(ttybarstring[5], "5");
-            strcat(ttybarstring[6], "6");
-            strcat(ttybarstring[7], "7");
+            strcat(ttybarstring[0], "H");
+            strcat(ttybarstring[1], "A");
+            strcat(ttybarstring[2], "B");
+            strcat(ttybarstring[3], "C");
+            strcat(ttybarstring[4], "D");
+            strcat(ttybarstring[5], "E");
+            strcat(ttybarstring[6], "F");
+            strcat(ttybarstring[7], "G");
             strcat(ttyspacestring, " ");
         }
     } else if (!tty) {
 
         buf_length = sizeof(wchar_t) * width * lines * 10;
         frame_buffer = (wchar_t *)malloc(buf_length);
-        spacestring = (wchar_t *)malloc(sizeof(wchar_t) * bar_width);
+        spacestring = (wchar_t *)malloc(sizeof(wchar_t) * (bar_width + 1));
 
         // clearing barstrings
         for (int n = 0; n < 8; n++) {
-            barstring[n] = (wchar_t *)malloc(sizeof(wchar_t) * bar_width);
+            barstring[n] = (wchar_t *)malloc(sizeof(wchar_t) * (bar_width + 1));
             barstring[n][0] = '\0';
         }
         spacestring[0] = '\0';
@@ -110,12 +124,15 @@ int init_terminal_noncurses(int tty, int col, int bgcol, int width, int lines, i
         bgcol += 40;
         printf("\033[%dm", bgcol);
 
-        for (int n = (lines); n >= 0; n--) {
+        for (int n = lines; n >= 0; n--) {
             for (int i = 0; i < width; i++) {
 
                 printf(" "); // setting backround color
             }
-            printf("\n");
+            if (n != 0)
+                printf("\n");
+            else
+                printf("\r");
         }
         printf("\033[%dA", lines); // moving cursor back up
     }
@@ -138,7 +155,8 @@ void get_terminal_dim_noncurses(int *width, int *lines) {
 }
 
 int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, int bar_width,
-                            int bar_spacing, int rest, int bars[200], int previous_frame[200]) {
+                            int bar_spacing, int rest, int bars[256], int previous_frame[256],
+                            int x_axis_info) {
 
     int current_cell, prev_cell, same_line, new_line, cx;
 
@@ -147,20 +165,18 @@ int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, i
     same_line = 0;
     new_line = 0;
     cx = 0;
-    if (!tty) {
 
+    if (!tty) {
         // output: check if terminal has been resized
         ioctl(STDOUT_FILENO, TIOCGWINSZ, &dim);
-
-        if ((int)dim.ws_row != lines || (int)dim.ws_col != width) {
-            free(frame_buffer);
-            free(spacestring);
-            for (int i = 0; i < 8; i++)
-                free(barstring[i]);
-
+        if (x_axis_info)
+            lines++;
+        if ((int)dim.ws_row != (lines) || (int)dim.ws_col != width)
             return -1;
-        }
+        if (x_axis_info)
+            lines--;
     }
+
     if (tty)
         ttyframe_buffer[0] = '\0';
     else if (!tty)
@@ -195,7 +211,7 @@ int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, i
                         same_bar = 0;
                     }
 
-                    if (!center_adjusted) {
+                    if (!center_adjusted && rest) {
                         cx += snprintf(ttyframe_buffer + cx, ttybuf_length - cx, "\033[%dC", rest);
                         center_adjusted = 1;
                     }
@@ -210,8 +226,9 @@ int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, i
                         cx += snprintf(ttyframe_buffer + cx, ttybuf_length - cx, "%s",
                                        ttybarstring[current_cell]);
 
-                    cx +=
-                        snprintf(ttyframe_buffer + cx, ttybuf_length - cx, "\033[%dC", bar_spacing);
+                    if (bar_spacing)
+                        cx += snprintf(ttyframe_buffer + cx, ttybuf_length - cx, "\033[%dC",
+                                       bar_spacing);
                 } else if (!tty) {
                     if (same_line > 0) {
                         cx += swprintf(frame_buffer + cx, buf_length - cx, L"\033[%dB",
@@ -238,7 +255,9 @@ int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, i
                     else
                         cx += swprintf(frame_buffer + cx, buf_length - cx, barstring[current_cell]);
 
-                    cx += swprintf(frame_buffer + cx, buf_length - cx, L"\033[%dC", bar_spacing);
+                    if (bar_spacing)
+                        cx +=
+                            swprintf(frame_buffer + cx, buf_length - cx, L"\033[%dC", bar_spacing);
                 }
             }
         }
@@ -267,16 +286,7 @@ int draw_terminal_noncurses(int tty, int lines, int width, int number_of_bars, i
     return 0;
 }
 
-// general: cleanup
 void cleanup_terminal_noncurses(void) {
-    free(frame_buffer);
-    free(ttyframe_buffer);
-    free(spacestring);
-    free(ttyspacestring);
-    for (int i = 0; i < 8; i++) {
-        free(barstring[i]);
-        free(ttybarstring[i]);
-    }
     setecho(STDIN_FILENO, 1);
     printf("\033[0m\n");
     system("setfont  >/dev/null 2>&1");

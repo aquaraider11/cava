@@ -22,7 +22,7 @@ enum input_method default_methods[] = {
     INPUT_PULSE,
 };
 
-char *outputMethod, *channels;
+char *outputMethod, *channels, *xaxisScale;
 
 const char *input_method_names[] = {
     "fifo", "portaudio", "alsa", "pulse", "sndio", "shmem",
@@ -52,18 +52,26 @@ void write_errorf(void *err, const char *fmt, ...) {
     va_end(args);
 }
 
-int validate_color(char *checkColor, int om, void *err) {
+int validate_color(char *checkColor, void *params, void *err) {
+    struct config_params *p = (struct config_params *)params;
     struct error_s *error = (struct error_s *)err;
     int validColor = 0;
     if (checkColor[0] == '#' && strlen(checkColor) == 7) {
         // If the output mode is not ncurses, tell the user to use a named colour instead of hex
         // colours.
-        if (om != OUTPUT_NCURSES) {
-            write_errorf(
-                error, "Only 'ncurses' output method supports HTML colors. Please change "
-                       "the colours or the output method.\nAs of version 0.7.0 ncurses is no longer"
-                       " the default output method\n");
+        if (p->om != OUTPUT_NCURSES) {
+#ifdef NCURSES
+            write_errorf(error,
+                         "hex color configured, but ncurses not set. Forcing ncurses mode.\n");
+            p->om = OUTPUT_NCURSES;
+#else
+            write_errorf(error,
+                         "Only 'ncurses' output method supports HTML colors "
+                         "(required by gradient). "
+                         "Cava was built without ncurses support, install ncurses(w) dev files "
+                         "and rebuild.\n");
             return 0;
+#endif
         }
         // 0 to 9 and a to f
         for (int i = 1; checkColor[i]; ++i) {
@@ -94,14 +102,14 @@ bool validate_colors(void *params, void *err) {
     struct error_s *error = (struct error_s *)err;
 
     // validate: color
-    if (!validate_color(p->color, p->om, error)) {
+    if (!validate_color(p->color, p, error)) {
         write_errorf(error, "The value for 'foreground' is invalid. It can be either one of the 7 "
                             "named colors or a HTML color of the form '#xxxxxx'.\n");
         return false;
     }
 
     // validate: background color
-    if (!validate_color(p->bcolor, p->om, error)) {
+    if (!validate_color(p->bcolor, p, error)) {
         write_errorf(error, "The value for 'background' is invalid. It can be either one of the 7 "
                             "named colors or a HTML color of the form '#xxxxxx'.\n");
         return false;
@@ -109,7 +117,7 @@ bool validate_colors(void *params, void *err) {
 
     if (p->gradient) {
         for (int i = 0; i < p->gradient_count; i++) {
-            if (!validate_color(p->gradient_colors[i], p->om, error)) {
+            if (!validate_color(p->gradient_colors[i], p, error)) {
                 write_errorf(
                     error,
                     "Gradient color %d is invalid. It must be HTML color of the form '#xxxxxx'.\n",
@@ -226,6 +234,17 @@ bool validate_config(struct config_params *p, struct error_s *error) {
 #endif
     }
 
+    p->xaxis = NONE;
+    if (strcmp(xaxisScale, "none") == 0) {
+        p->xaxis = NONE;
+    }
+    if (strcmp(xaxisScale, "frequency") == 0) {
+        p->xaxis = FREQUENCY;
+    }
+    if (strcmp(xaxisScale, "note") == 0) {
+        p->xaxis = NOTE;
+    }
+
     // validate: output channels
     p->stereo = -1;
     if (strcmp(channels, "mono") == 0) {
@@ -267,6 +286,7 @@ bool validate_config(struct config_params *p, struct error_s *error) {
         return false;
     }
 
+    // validate: colors
     if (!validate_colors(p, error)) {
         return false;
     }
@@ -296,14 +316,6 @@ bool validate_config(struct config_params *p, struct error_s *error) {
 
     // setting sens
     p->sens = p->sens / 100;
-
-    // validate FFT buffer
-    if (p->FFTbufferSize >= 8 && p->FFTbufferSize <= 16) {
-        p->FFTbufferSize = pow(2, p->FFTbufferSize);
-    } else {
-        write_errorf(error, "FFT buffer is set in the exponent of 2 and must be between 8 - 16\n");
-        return false;
-    }
 
     return true;
 }
@@ -411,12 +423,13 @@ bool load_config(char configPath[PATH_MAX], struct config_params *p, bool colors
     }
 
 #ifdef NCURSES
-    outputMethod = (char *)iniparser_getstring(ini, "output:method", "noncurses");
+    outputMethod = (char *)iniparser_getstring(ini, "output:method", "ncurses");
 #endif
 #ifndef NCURSES
     outputMethod = (char *)iniparser_getstring(ini, "output:method", "noncurses");
 #endif
 
+    xaxisScale = (char *)iniparser_getstring(ini, "output:xaxis", "none");
     p->monstercat = 1.5 * iniparser_getdouble(ini, "smoothing:monstercat", 0);
     p->waves = iniparser_getint(ini, "smoothing:waves", 0);
     p->integral = iniparser_getdouble(ini, "smoothing:integral", 77);
@@ -436,7 +449,7 @@ bool load_config(char configPath[PATH_MAX], struct config_params *p, bool colors
     p->overshoot = iniparser_getint(ini, "general:overshoot", 20);
     p->lower_cut_off = iniparser_getint(ini, "general:lower_cutoff_freq", 50);
     p->upper_cut_off = iniparser_getint(ini, "general:higher_cutoff_freq", 10000);
-    p->FFTbufferSize = iniparser_getint(ini, "general:FFTbufferSize", 12);
+    p->sleep_timer = iniparser_getint(ini, "general:sleep_timer", 0);
 
     // config: output
     free(channels);
@@ -457,7 +470,7 @@ bool load_config(char configPath[PATH_MAX], struct config_params *p, bool colors
     p->userEQ_keys = iniparser_getsecnkeys(ini, "eq");
     if (p->userEQ_keys > 0) {
         p->userEQ_enabled = 1;
-        p->userEQ = calloc(p->userEQ_keys + 1, sizeof(p->userEQ));
+        p->userEQ = (double *)calloc(p->userEQ_keys + 1, sizeof(double));
 #ifndef LEGACYINIPARSER
         const char *keys[p->userEQ_keys];
         iniparser_getseckeys(ini, "eq", keys);

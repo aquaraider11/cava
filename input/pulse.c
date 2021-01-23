@@ -5,8 +5,6 @@
 #include <pulse/pulseaudio.h>
 #include <pulse/simple.h>
 
-#define BUFFERSIZE 4096
-
 pa_mainloop *m_pulseaudio_mainloop;
 
 void cb(__attribute__((unused)) pa_context *pulseaudio_context, const pa_server_info *i,
@@ -14,6 +12,7 @@ void cb(__attribute__((unused)) pa_context *pulseaudio_context, const pa_server_
 
     // getting default sink name
     struct audio_data *audio = (struct audio_data *)userdata;
+    free(audio->source);
     audio->source = malloc(sizeof(char) * 1024);
 
     strcpy(audio->source, i->default_sink_name);
@@ -99,17 +98,20 @@ void getPulseDefaultSink(void *data) {
 void *input_pulse(void *data) {
 
     struct audio_data *audio = (struct audio_data *)data;
-    int16_t buf[BUFFERSIZE / 2];
+    uint16_t frames = audio->FFTtreblebufferSize;
+    int channels = 2;
+    int16_t buf[frames * channels];
 
     /* The sample type to use */
     static const pa_sample_spec ss = {.format = PA_SAMPLE_S16LE, .rate = 44100, .channels = 2};
 
     audio->format = 16;
 
-    static const pa_buffer_attr pb = {.maxlength = (uint32_t)-1, // BUFSIZE * 2,
-                                      .fragsize = BUFFERSIZE};
+    const int frag_size = frames * channels * audio->format / 8 *
+                          2; // we double this because of cpu performance issues with pulseaudio
 
-    uint16_t frames = BUFFERSIZE / 4;
+    pa_buffer_attr pb = {.maxlength = (uint32_t)-1, // BUFSIZE * 2,
+                         .fragsize = frag_size};
 
     pa_simple *s = NULL;
     int error;
@@ -121,7 +123,6 @@ void *input_pulse(void *data) {
                 audio->source, pa_strerror(error));
 
         audio->terminate = 1;
-        pthread_exit(NULL);
     }
 
     while (!audio->terminate) {
@@ -129,14 +130,14 @@ void *input_pulse(void *data) {
             sprintf(audio->error_message, __FILE__ ": pa_simple_read() failed: %s\n",
                     pa_strerror(error));
             audio->terminate = 1;
-            pthread_exit(NULL);
         }
 
-        // sorting out channels
-
-        write_to_fftw_input_buffers(buf, frames, data);
+        pthread_mutex_lock(&lock);
+        write_to_fftw_input_buffers(frames, buf, data);
+        pthread_mutex_unlock(&lock);
     }
 
     pa_simple_free(s);
+    pthread_exit(NULL);
     return 0;
 }

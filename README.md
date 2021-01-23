@@ -9,9 +9,7 @@ Now also works on macOS!
 
 by [Karl Stavestrand](mailto:karl@stavestrand.no)
 
-![spectrum](https://raw.githubusercontent.com/karlstav/cava/gh-pages/cava_gradient.gif "spectrum")
-
-thanks to [anko](https://github.com/anko) for the gif, here is the [recipe]( http://unix.stackexchange.com/questions/113695/gif-screencastng-the-unix-way).
+![spectrum](https://github.com/karlstav/cava/blob/master/example_files/cava.gif "spectrum")
 
 [Demo video](https://youtu.be/9PSp8VA6yjU)
 
@@ -31,6 +29,7 @@ thanks to [anko](https://github.com/anko) for the gif, here is the [recipe]( htt
     - [Fedora](#fedora)
     - [Arch](#arch)
     - [Ubuntu](#ubuntu)
+    - [Debian (unstable)](#debian-unstable)
 - [Capturing audio](#capturing-audio)
   - [From Pulseaudio monitor source (Easy, default if supported)](#from-pulseaudio-monitor-source-easy-default-if-supported)
   - [From ALSA-loopback device (Tricky)](#from-alsa-loopback-device-tricky)
@@ -192,19 +191,21 @@ Cava is in [AUR](https://aur.archlinux.org/packages/cava/).
 
 #### Ubuntu
 
-Michael Nguyen has added CAVA to his PPA, it can be installed with:
+Harshal Sheth has added CAVA to his PPA, it can be installed with:
 
-    sudo add-apt-repository ppa:tehtotalpwnage/ppa
-    sudo apt-get update
-    sudo apt-get install cava
-    
-For Ubuntu 18 or newer, you can use Harshal Sheth's PPA:
-
-    sudo add-apt-repository ppa:hsheth2/ppa
-    sudo apt-get update
-    sudo apt-get install cava
+    add-apt-repository ppa:hsheth2/ppa
+    apt-get update
+    apt-get install cava
 
 All distro specific instalation sources might be out of date.
+
+#### Debian (unstable)
+
+A package has now been introduced into Debian Unstable.
+
+    apt-get install cava
+    
+It should move into Debian testing and stable over time, and will therefore also move into the repositories of Ubuntu and its derivatives. For more information see issue [#373](https://github.com/karlstav/cava/issues/373).
 
 
 Capturing audio
@@ -212,13 +213,11 @@ Capturing audio
 
 ### From Pulseaudio monitor source (Easy, default if supported)
 
-First make sure you have installed pulseaudio dev files and that cava has been built with pulseaudio support (it should be automatically if the dev files are found).
+Just make sure you have installed pulseaudio dev files and that cava has been built with pulseaudio support (it should be automatically if the dev files are found).
 
-If you're lucky all you have to do is to uncomment this line in the config file under input:
-
-    method = pulse
+If you're lucky all you have to do is to run cava.
  
-If nothing happens you might have to use a different source than the default. The default might also be your microphone. Look at the config file for help. 
+If nothing happens you might have to use a different source than the default. The default might also be your microphone. Look at the [config](#configuration) file for help. 
 
 
 ### From ALSA-loopback device (Tricky)
@@ -227,7 +226,7 @@ Set
 
     method = alsa
 
-in the config file.
+in the [config](#configuration) file.
 
 ALSA can be difficult because there is no native way to grab audio from an output. If you want to capture audio straight fom the output (not just mic or line-in), you must create an ALSA loopback interface, then output the audio simultaneously to both the loopback and your normal interface.
 
@@ -262,7 +261,7 @@ Add these lines in mpd:
         format                  "44100:16:2"
     }
 
-Uncomment and change input method to `fifo` in the config file.
+Uncomment and change input method to `fifo` in the [config](#configuration) file.
 
 The path of the fifo can be specified with the `source` parameter.
 
@@ -291,7 +290,7 @@ $ AUDIODEVICE=snd/0.monitor cava
 
 ### squeezelite
 [squeezelite](https://en.wikipedia.org/wiki/Squeezelite) is one of several software clients available for the Logitech Media Server. Squeezelite can export its audio data as shared memory, which is what this input module uses.
-Just adapt your config:
+Just adapt your [config](#configuration):
 ```
 method = shmem
 source = /squeezelite-AA:BB:CC:DD:EE:FF
@@ -300,16 +299,28 @@ where `AA:BB:CC:DD:EE:FF` is squeezelite's MAC address (check the LMS Web GUI (S
 Note: squeezelite must be started with the `-v` flag to enable visualizer support.
 
 ### macOS
-Install [Soundflower](https://github.com/mattingalls/Soundflower) to create a loopback interface. Use Audio MIDI Setup to configure a virtual interface that outputs audio to both your speakers and the loopbacl interface, following [this](https://github.com/RogueAmoeba/Soundflower-Original/issues/44#issuecomment-151586106) recipe.
 
-Then edit your config to use this interface with portaudio:
+Note: Cava doesn't render correctly within the default macOS terminal. In order to achieve an optimal display, install [Kitty](https://sw.kovidgoyal.net/kitty/index.html). Beware that you may run in to the issue presented in #109; however, it can be resolved with [this](https://stackoverflow.com/questions/7165108/in-os-x-lion-lang-is-not-set-to-utf-8-how-to-fix-it).
+
+**Background Music**
+
+Install [Background Music](https://github.com/kyleneideck/BackgroundMusic) which provides a loopback interface automatically. Once installed and running just edit your [config](#configuration) to use this interface with portaudio:
+
+```
+method = portaudio
+source = "Background Music"
+```
+
+**Sound Flower**
+
+[Soundflower](https://github.com/mattingalls/Soundflower) also works to create a loopback interface. Use Audio MIDI Setup to configure a virtual interface that outputs audio to both your speakers and the loopback interface, following [this](https://github.com/RogueAmoeba/Soundflower-Original/issues/44#issuecomment-151586106) recipe. By creating a multi-output device you lose the ability to control the volume on your keyboard. Because of this, we recommend the Background Music app which still gives you keyboard controls.
+
+Then edit your [config](#configuration) to use this interface with portaudio:
 
 ```
 method = portaudio
 source = "Soundflower (2ch)"
 ```
-
-Note: cava looks no good in the default macOS terminal. For a better look install [kitty](https://sw.kovidgoyal.net/kitty/index.html). Be where that you might run into #109, that can be fixed like [this](https://stackoverflow.com/questions/7165108/in-os-x-lion-lang-is-not-set-to-utf-8-how-to-fix-it).
 
 
 Running via ssh
@@ -326,6 +337,8 @@ exit with ctrl+z then run 'bg' to keep it running after you log out.
 ### Raw Output
 
 You can also use Cava's output for other programs by using raw output mode, which will write bar data to `STDOUT` that can be piped into other processes. More information on this option is documented in [the example config file](/example_files/config).
+
+A useful starting point example script written in python that consumes raw data can be found [here](https://github.com/karlstav/cava/issues/123#issuecomment-307891020).
 
 Font notes
 ----------
